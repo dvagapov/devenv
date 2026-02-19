@@ -1,0 +1,35 @@
+## Argo CD project that owns all generated Applications
+argocd:
+  namespace: argocd
+  project: default
+  ## Git repo that contains the deployment/charts/* chart directories
+  repoURL: https://github.com/<org>/<repo>.git
+  targetRevision: HEAD
+
+## Each entry produces one Argo CD Application CR.
+## 'name' is the Application name; 'path' is the chart path inside the repo.
+applications:
+  - name: kube-state-metrics
+    path: deployment/charts/kube-state-metrics
+    namespace: observability
+    syncWave: "1"
+
+  - name: metrics-server
+    path: deployment/charts/metrics-server
+    namespace: kube-system
+    syncWave: "1"
+
+  - name: clickhouse
+    path: deployment/charts/clickhouse
+    namespace: observability
+    syncWave: "2"
+
+  - name: vector
+    path: deployment/charts/vector
+    namespace: observability
+    syncWave: "3"
+
+  - name: grafana
+    path: deployment/charts/grafana
+    namespace: observability
+    syncWave: "4"

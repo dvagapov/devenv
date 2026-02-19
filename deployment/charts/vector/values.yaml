@@ -1,0 +1,77 @@
+vector:
+  role: Agent
+  service:
+    enabled: false
+
+  customConfig:
+    data_dir: /vector-data-dir
+
+    api:
+      enabled: true
+      address: 0.0.0.0:8686
+
+    sources:
+      ## Automatically discovers and collects all container logs on the node
+      kubernetes_logs:
+        type: kubernetes_logs
+
+      ## Scrape pods with prometheus.io/scrape=true annotations
+      prometheus_scrape:
+        type: prometheus_scrape
+        scrape_interval_secs: 30
+
+      ## Node-level & pod-level resource metrics via kubelet
+      host_metrics:
+        type: host_metrics
+        collectors:
+          - cpu
+          - memory
+          - disk
+          - network
+        scrape_interval_secs: 30
+
+    transforms:
+      ## Enrich logs with a short message field and drop noisy keys
+      parse_logs:
+        type: remap
+        inputs: ["kubernetes_logs"]
+        source: |
+          .timestamp = del(.timestamp)
+          .kubernetes = del(.kubernetes)
+
+    sinks:
+      ## Logs → ClickHouse via HTTP (native JSON insert)
+      clickhouse_logs:
+        type: clickhouse
+        inputs: ["parse_logs"]
+        endpoint: http://clickhouse.observability.svc.cluster.local:8123
+        database: observability
+        table: vector_logs
+        auth:
+          strategy: basic
+          user: default
+          password: clickhouse
+        skip_unknown_fields: true
+        batch:
+          max_bytes: 1048576
+          timeout_secs: 5
+        encoding:
+          timestamp_format: unix
+
+      ## Metrics → ClickHouse
+      clickhouse_metrics:
+        type: clickhouse
+        inputs: ["prometheus_scrape", "host_metrics"]
+        endpoint: http://clickhouse.observability.svc.cluster.local:8123
+        database: observability
+        table: vector_metrics
+        auth:
+          strategy: basic
+          user: default
+          password: clickhouse
+        skip_unknown_fields: true
+        batch:
+          max_bytes: 1048576
+          timeout_secs: 5
+        encoding:
+          timestamp_format: unix

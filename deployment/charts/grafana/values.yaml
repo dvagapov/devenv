@@ -1,0 +1,19 @@
+grafana:
+  adminUser: admin
+  adminPassword: admin
+  plugins:
+    - grafana-clickhouse-datasource
+  service:
+    type: ClusterIP
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: ClickHouse
+          type: grafana-clickhouse-datasource
+          access: proxy
+          url: http://clickhouse.observability.svc.cluster.local:8123
+          jsonData:
+            defaultDatabase: observability
+          secureJsonData:
+            password: clickhouse

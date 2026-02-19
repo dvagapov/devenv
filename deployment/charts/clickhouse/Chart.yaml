@@ -1,0 +1,11 @@
+apiVersion: v2
+name: clickhouse
+description: ClickHouse — central data store for ML business data, pod logs and metrics
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+dependencies:
+  - name: clickhouse
+    version: "9.4.4"
+    repository: https://charts.bitnami.com/bitnami

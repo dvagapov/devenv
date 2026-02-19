@@ -1,0 +1,11 @@
+clickhouse:
+  auth:
+    username: default
+    password: clickhouse
+  shards: 1
+  replicaCount: 1
+  ## Pre-create databases on startup via initdbScripts
+  initdbScripts:
+    create-databases.sql: |
+      CREATE DATABASE IF NOT EXISTS ml;
+      CREATE DATABASE IF NOT EXISTS observability;

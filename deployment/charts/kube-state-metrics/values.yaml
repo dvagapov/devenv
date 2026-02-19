@@ -1,0 +1,4 @@
+kube-state-metrics:
+  ## All default KSM settings work for a single-node k3d cluster.
+  ## Override anything here as needed.
+  {}
