@@ -1,11 +1,31 @@
-clickhouse:
-  auth:
-    username: default
-    password: clickhouse
-  shards: 1
-  replicaCount: 1
-  ## Pre-create databases on startup via initdbScripts
-  initdbScripts:
-    create-databases.sql: |
-      CREATE DATABASE IF NOT EXISTS ml;
-      CREATE DATABASE IF NOT EXISTS observability;
+image:
+  repository: clickhouse/clickhouse-server
+  tag: "26.1-alpine"
+  pullPolicy: IfNotPresent
+
+auth:
+  username: default
+  password: clickhouse
+
+service:
+  type: ClusterIP
+  httpPort: 8123
+  nativePort: 9000
+
+persistence:
+  enabled: true
+  storageClass: local-path
+  size: 5Gi
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+initScripts:
+  create-databases.sql: |
+    CREATE DATABASE IF NOT EXISTS ml;
+    CREATE DATABASE IF NOT EXISTS observability;

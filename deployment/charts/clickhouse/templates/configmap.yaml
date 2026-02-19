@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "clickhouse.fullname" . }}-config
+  labels:
+    {{- include "clickhouse.labels" . | nindent 4 }}
+data:
+  users.xml: |
+    <clickhouse>
+      <users>
+        <{{ .Values.auth.username }}>
+          <password>{{ .Values.auth.password }}</password>
+          <networks>
+            <ip>::/0</ip>
+          </networks>
+          <profile>default</profile>
+          <quota>default</quota>
+          <access_management>1</access_management>
+        </{{ .Values.auth.username }}>
+      </users>
+    </clickhouse>

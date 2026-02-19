@@ -19,6 +19,8 @@ vector:
       prometheus_scrape:
         type: prometheus_scrape
         scrape_interval_secs: 30
+        endpoints:
+          - http://kube-state-metrics.observability.svc.cluster.local:8080/metrics
 
       ## Node-level & pod-level resource metrics via kubelet
       host_metrics:

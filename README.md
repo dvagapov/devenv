@@ -85,7 +85,7 @@ Each tool chart under `charts/` has its own `Chart.yaml` (upstream dependency) a
 |---|---|---|
 | `kube-state-metrics` | prometheus-community/kube-state-metrics | K8s object-level metrics |
 | `metrics-server` | kubernetes-sigs/metrics-server | Node & pod resource metrics |
-| `clickhouse` | bitnami/clickhouse | Central data store — ML business data (`ml` DB) + logs & metrics (`observability` DB) |
+| `clickhouse` | clickhouse/clickhouse-server (Docker Hub) | Central data store — ML business data (`ml` DB) + logs & metrics (`observability` DB) |
 | `vector` | vector.dev/vector | Lightweight agent — container logs + Prometheus metrics → ClickHouse |
 | `grafana` | grafana/grafana | Dashboards with ClickHouse datasource |
 
