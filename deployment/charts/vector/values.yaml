@@ -41,6 +41,11 @@ vector:
           .timestamp = del(.timestamp)
           .kubernetes = del(.kubernetes)
 
+      ## Convert metrics to logs so they can be sent to the ClickHouse sink
+      metrics_to_logs:
+        type: metric_to_log
+        inputs: ["prometheus_scrape", "host_metrics"]
+
     sinks:
       ## Logs → ClickHouse via HTTP (native JSON insert)
       clickhouse_logs:
@@ -60,10 +65,10 @@ vector:
         encoding:
           timestamp_format: unix
 
-      ## Metrics → ClickHouse
+      ## Metrics (as logs) → ClickHouse
       clickhouse_metrics:
         type: clickhouse
-        inputs: ["prometheus_scrape", "host_metrics"]
+        inputs: ["metrics_to_logs"]
         endpoint: http://clickhouse.observability.svc.cluster.local:8123
         database: observability
         table: vector_metrics
