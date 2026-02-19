@@ -3,8 +3,8 @@ argocd:
   namespace: argocd
   project: default
   ## Git repo that contains the deployment/charts/* chart directories
-  repoURL: https://github.com/<org>/<repo>.git
-  targetRevision: HEAD
+  repoURL: https://github.com/dvagapov/devenv.git
+  targetRevision: develop
 
 ## Each entry produces one Argo CD Application CR.
 ## 'name' is the Application name; 'path' is the chart path inside the repo.
