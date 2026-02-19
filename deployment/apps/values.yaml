@@ -14,11 +14,6 @@ applications:
     namespace: observability
     syncWave: "1"
 
-  - name: metrics-server
-    path: deployment/charts/metrics-server
-    namespace: kube-system
-    syncWave: "1"
-
   - name: clickhouse
     path: deployment/charts/clickhouse
     namespace: observability
