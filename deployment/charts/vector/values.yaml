@@ -38,11 +38,11 @@ vector:
         type: remap
         inputs: ["kubernetes_logs"]
         source: |
-          .pod_name = del(.kubernetes.pod_name) ?? ""
-          .pod_namespace = del(.kubernetes.pod_namespace) ?? ""
-          .container_name = del(.kubernetes.container_name) ?? ""
-          .container_image = del(.kubernetes.container_image) ?? ""
-          .node_name = del(.kubernetes.pod_node_name) ?? ""
+          .pod_name = string(del(.kubernetes.pod_name)) ?? ""
+          .pod_namespace = string(del(.kubernetes.pod_namespace)) ?? ""
+          .container_name = string(del(.kubernetes.container_name)) ?? ""
+          .container_image = string(del(.kubernetes.container_image)) ?? ""
+          .node_name = string(del(.kubernetes.pod_node_name)) ?? ""
           del(.kubernetes)
 
       ## Step 1: convert Metric events to Log events
@@ -55,16 +55,15 @@ vector:
         type: remap
         inputs: ["raw_metrics_to_logs"]
         source: |
-          .metric_name = del(.name) ?? ""
-          .metric_kind = del(.kind) ?? ""
-          .metric_value = if exists(.gauge) {
-              to_float(.gauge.value) ?? 0.0
-          } else if exists(.counter) {
-              to_float(.counter.value) ?? 0.0
-          } else { 0.0 }
+          .metric_name = string(del(.name)) ?? ""
+          .metric_kind = string(del(.kind)) ?? ""
+          gv, err1 = to_float(.gauge.value)
+          cv, err2 = to_float(.counter.value)
+          if err1 == null { .metric_value = gv } else if err2 == null { .metric_value = cv } else { .metric_value = 0.0 }
           del(.gauge)
           del(.counter)
-          .tags = encode_json(del(.tags) ?? {})
+          t = del(.tags)
+          if t != null { .tags = encode_json(t) } else { .tags = "{}" }
           .source_type = "metric"
 
     sinks:
