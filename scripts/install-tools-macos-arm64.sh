@@ -49,8 +49,8 @@ done
 ## Start Colima if not already running (2 CPUs, 4 GB RAM, 60 GB disk)
 if command -v colima >/dev/null 2>&1; then
   if ! colima status >/dev/null 2>&1; then
-    echo "Starting Colima VM (2 CPU, 4 GB RAM, 60 GB disk)..."
-    colima start --cpu 2 --memory 4 --disk 60 --arch aarch64 --vm-type vz --network-address
+    echo "Starting Colima VM (4 CPU, 8 GB RAM, 60 GB disk)..."
+    colima start --cpu 4 --memory 8 --disk 60 --arch aarch64 --vm-type vz --network-address
     echo "Colima started."
   else
     echo "Colima is already running."
