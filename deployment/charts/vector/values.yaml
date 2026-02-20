@@ -47,6 +47,18 @@ vector:
         inputs: ["prometheus_scrape", "host_metrics"]
 
     sinks:
+      ## Debug: print a sample of logs and metrics to stdout
+      debug_logs:
+        type: console
+        inputs: ["parse_logs"]
+        encoding:
+          codec: json
+      debug_metrics:
+        type: console
+        inputs: ["metrics_to_logs"]
+        encoding:
+          codec: json
+
       ## Logs → ClickHouse via HTTP (native JSON insert)
       clickhouse_logs:
         type: clickhouse
