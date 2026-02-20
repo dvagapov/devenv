@@ -32,6 +32,8 @@ formulae=(
   yq
   k9s
   kubectx
+  docker
+  colima
 )
 
 for formula in "${formulae[@]}"; do
@@ -44,10 +46,15 @@ for formula in "${formulae[@]}"; do
   fi
 done
 
-if ! command -v docker >/dev/null 2>&1; then
-  echo "Docker CLI not found. Installing Docker Desktop cask..."
-  brew install --cask docker
-  echo "Please open Docker Desktop once and wait until engine is running."
+## Start Colima if not already running (2 CPUs, 4 GB RAM, 60 GB disk)
+if command -v colima >/dev/null 2>&1; then
+  if ! colima status >/dev/null 2>&1; then
+    echo "Starting Colima VM (2 CPU, 4 GB RAM, 60 GB disk)..."
+    colima start --cpu 2 --memory 4 --disk 60 --arch aarch64 --vm-type vz --network-address
+    echo "Colima started."
+  else
+    echo "Colima is already running."
+  fi
 fi
 
 echo
