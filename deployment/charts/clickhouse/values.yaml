@@ -26,6 +26,34 @@ resources:
     memory: 1Gi
 
 initScripts:
-  create-databases.sql: |
+  01-create-databases.sql: |
     CREATE DATABASE IF NOT EXISTS ml;
     CREATE DATABASE IF NOT EXISTS observability;
+  02-create-tables.sql: |
+    CREATE TABLE IF NOT EXISTS observability.vector_logs (
+        timestamp DateTime64(9) DEFAULT now64(9),
+        message String DEFAULT '',
+        file String DEFAULT '',
+        source_type LowCardinality(String) DEFAULT '',
+        stream LowCardinality(String) DEFAULT '',
+        pod_name String DEFAULT '',
+        pod_namespace LowCardinality(String) DEFAULT '',
+        container_name String DEFAULT '',
+        container_image String DEFAULT '',
+        node_name String DEFAULT ''
+    ) ENGINE = MergeTree()
+    PARTITION BY toYYYYMMDD(timestamp)
+    ORDER BY (pod_namespace, pod_name, timestamp)
+    TTL toDateTime(timestamp) + INTERVAL 7 DAY;
+
+    CREATE TABLE IF NOT EXISTS observability.vector_metrics (
+        timestamp DateTime64(9) DEFAULT now64(9),
+        metric_name String DEFAULT '',
+        metric_kind LowCardinality(String) DEFAULT '',
+        metric_value Float64 DEFAULT 0,
+        tags String DEFAULT '',
+        source_type LowCardinality(String) DEFAULT ''
+    ) ENGINE = MergeTree()
+    PARTITION BY toYYYYMMDD(timestamp)
+    ORDER BY (metric_name, timestamp)
+    TTL toDateTime(timestamp) + INTERVAL 7 DAY;

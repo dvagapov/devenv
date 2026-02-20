@@ -33,32 +33,41 @@ vector:
         scrape_interval_secs: 30
 
     transforms:
-      ## Enrich logs with a short message field and drop noisy keys
+      ## Flatten kubernetes_logs into columns matching the ClickHouse table
       parse_logs:
         type: remap
         inputs: ["kubernetes_logs"]
         source: |
-          .timestamp = del(.timestamp)
-          .kubernetes = del(.kubernetes)
+          .pod_name = del(.kubernetes.pod_name) ?? ""
+          .pod_namespace = del(.kubernetes.pod_namespace) ?? ""
+          .container_name = del(.kubernetes.container_name) ?? ""
+          .container_image = del(.kubernetes.container_image) ?? ""
+          .node_name = del(.kubernetes.pod_node_name) ?? ""
+          del(.kubernetes)
 
-      ## Convert metrics to logs so they can be sent to the ClickHouse sink
-      metrics_to_logs:
+      ## Step 1: convert Metric events to Log events
+      raw_metrics_to_logs:
         type: metric_to_log
         inputs: ["prometheus_scrape", "host_metrics"]
 
-    sinks:
-      ## Debug: print a sample of logs and metrics to stdout
-      debug_logs:
-        type: console
-        inputs: ["parse_logs"]
-        encoding:
-          codec: json
-      debug_metrics:
-        type: console
-        inputs: ["metrics_to_logs"]
-        encoding:
-          codec: json
+      ## Step 2: flatten the nested metric JSON into columns
+      metrics_to_logs:
+        type: remap
+        inputs: ["raw_metrics_to_logs"]
+        source: |
+          .metric_name = del(.name) ?? ""
+          .metric_kind = del(.kind) ?? ""
+          .metric_value = if exists(.gauge) {
+              to_float(.gauge.value) ?? 0.0
+          } else if exists(.counter) {
+              to_float(.counter.value) ?? 0.0
+          } else { 0.0 }
+          del(.gauge)
+          del(.counter)
+          .tags = encode_json(del(.tags) ?? {})
+          .source_type = "metric"
 
+    sinks:
       ## Logs → ClickHouse via HTTP (native JSON insert)
       clickhouse_logs:
         type: clickhouse
