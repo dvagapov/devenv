@@ -1,0 +1,9 @@
+{{- if .Values.bootstrap.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.cluster.name }}-bootstrap-sql
+data:
+  init.sql: |
+{{ .Values.bootstrap.sql | indent 4 }}
+{{- end }}

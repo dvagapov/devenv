@@ -1,0 +1,18 @@
+apiVersion: clickhouse.com/v1alpha1
+kind: ClickHouseCluster
+metadata:
+  name: {{ .Values.cluster.name }}
+spec:
+  replicas: {{ .Values.cluster.replicas }}
+  image:
+    repository: {{ .Values.image.repository }}
+    tag: {{ .Values.image.tag | quote }}
+  dataVolumeClaimSpec:
+    accessModes:
+      - ReadWriteOnce
+    {{- if .Values.storage.storageClassName }}
+    storageClassName: {{ .Values.storage.storageClassName }}
+    {{- end }}
+    resources:
+      requests:
+        storage: {{ .Values.storage.size }}

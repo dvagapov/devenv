@@ -1,5 +1,12 @@
 vector:
   role: Agent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 768Mi
   service:
     enabled: false
 
@@ -71,6 +78,8 @@ vector:
       clickhouse_logs:
         type: clickhouse
         inputs: ["parse_logs"]
+        healthcheck:
+          enabled: false
         endpoint: http://clickhouse.observability.svc.cluster.local:8123
         database: observability
         table: vector_logs
@@ -79,9 +88,12 @@ vector:
           user: default
           password: clickhouse
         skip_unknown_fields: true
+        compression: gzip
         batch:
-          max_bytes: 1048576
+          max_bytes: 262144
           timeout_secs: 5
+        request:
+          timeout_secs: 30
         encoding:
           timestamp_format: unix
 
@@ -89,6 +101,8 @@ vector:
       clickhouse_metrics:
         type: clickhouse
         inputs: ["metrics_to_logs"]
+        healthcheck:
+          enabled: false
         endpoint: http://clickhouse.observability.svc.cluster.local:8123
         database: observability
         table: vector_metrics
@@ -97,8 +111,11 @@ vector:
           user: default
           password: clickhouse
         skip_unknown_fields: true
+        compression: gzip
         batch:
-          max_bytes: 1048576
+          max_bytes: 262144
           timeout_secs: 5
+        request:
+          timeout_secs: 30
         encoding:
           timestamp_format: unix

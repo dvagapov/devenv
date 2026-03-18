@@ -14,17 +14,22 @@ applications:
     namespace: observability
     syncWave: "1"
 
-  - name: clickhouse
-    path: deployment/charts/clickhouse
+  - name: clickhouse-operator
+    path: deployment/charts/clickhouse-operator
     namespace: observability
     syncWave: "2"
+
+  - name: clickhouse
+    path: deployment/charts/clickhouse-cluster
+    namespace: observability
+    syncWave: "3"
 
   - name: vector
     path: deployment/charts/vector
     namespace: observability
-    syncWave: "3"
+    syncWave: "4"
 
   - name: grafana
     path: deployment/charts/grafana
     namespace: observability
-    syncWave: "4"
+    syncWave: "5"
