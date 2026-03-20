@@ -2,6 +2,13 @@ cluster:
   name: clickhouse
   replicas: 1
 
+keeper:
+  name: clickhouse-keeper
+  replicas: 1
+  storage:
+    storageClassName: local-path
+    size: 1Gi
+
 image:
   repository: clickhouse/clickhouse-server
   tag: "26.1-alpine"

@@ -4,6 +4,8 @@ metadata:
   name: {{ .Values.cluster.name }}
 spec:
   replicas: {{ .Values.cluster.replicas }}
+  keeperClusterRef:
+    name: {{ .Values.keeper.name }}
   image:
     repository: {{ .Values.image.repository }}
     tag: {{ .Values.image.tag | quote }}

@@ -1,0 +1,15 @@
+apiVersion: clickhouse.com/v1alpha1
+kind: KeeperCluster
+metadata:
+  name: {{ .Values.keeper.name }}
+spec:
+  replicas: {{ .Values.keeper.replicas }}
+  dataVolumeClaimSpec:
+    accessModes:
+      - ReadWriteOnce
+    {{- if .Values.keeper.storage.storageClassName }}
+    storageClassName: {{ .Values.keeper.storage.storageClassName }}
+    {{- end }}
+    resources:
+      requests:
+        storage: {{ .Values.keeper.storage.size }}
