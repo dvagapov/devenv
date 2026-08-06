@@ -1,0 +1,56 @@
+{{/* Golden signal: latency — avg HTTP request duration (sum/count over window; see
+     deploy/charts/vector/values.yaml for how the _sum/_count series are derived from
+     the histogram — this is an approximation, not a true percentile). */}}
+{{- range $svc := .Values.services }}
+{{- $cfg := include "grafana-monitoring.svcConfig" (dict "svc" $svc "defaults" $.Values.defaults) | fromYaml }}
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaAlertRuleGroup
+metadata:
+  name: {{ $cfg.name }}-latency
+  labels:
+    app: {{ $cfg.name }}
+    golden-signal: latency
+spec:
+  instanceSelector:
+    matchLabels:
+      {{- toYaml $.Values.grafanaInstance.instanceLabel | nindent 6 }}
+  folderUID: {{ include "grafana-monitoring.folderUID" $cfg.name }}
+  resyncPeriod: 5m
+  interval: 1m
+  rules:
+    - uid: {{ $cfg.name }}-high-latency
+      title: "{{ $cfg.displayName }}: high HTTP latency"
+      condition: threshold
+      for: 5m
+      noDataState: NoData
+      execErrState: Error
+      labels:
+        severity: warning
+        signal: latency
+        service: {{ $cfg.name }}
+      annotations:
+        summary: "Average HTTP request latency is above {{ $cfg.thresholds.latencyP95Seconds }}s"
+        description: "Avg HTTP request duration over the last 5m exceeds threshold."
+      data:
+        - refId: query
+          datasourceUid: {{ $.Values.clickhouseDatasourceUid }}
+          relativeTimeRange: { from: 300, to: 0 }
+          model:
+            queryType: sql
+            rawSql: >-
+              SELECT argMaxIf(metric_value, timestamp, metric_name = '{{ $cfg.metrics.httpDurationSecondsSum }}')
+                / nullif(argMaxIf(metric_value, timestamp, metric_name = '{{ $cfg.metrics.httpDurationSecondsCount }}'), 0) AS value
+              FROM {{ $cfg.namespace }}.vector_metrics
+              WHERE metric_name IN ('{{ $cfg.metrics.httpDurationSecondsSum }}', '{{ $cfg.metrics.httpDurationSecondsCount }}')
+                AND timestamp >= now() - INTERVAL 5 MINUTE
+        - refId: threshold
+          datasourceUid: __expr__
+          model:
+            type: threshold
+            expression: query
+            conditions:
+              - evaluator:
+                  type: gt
+                  params: [{{ $cfg.thresholds.latencyP95Seconds }}]
+{{- end }}

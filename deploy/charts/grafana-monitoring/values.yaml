@@ -1,0 +1,60 @@
+grafanaInstance:
+  name: grafana
+  # community grafana Helm chart's fullname == release name "grafana" when installed via the
+  # deploy/charts/grafana app; it creates a Secret of the same name with admin-user/admin-password keys.
+  url: http://grafana.observability.svc.cluster.local
+  credentialsSecretName: grafana
+  adminUserKey: admin-user
+  adminPasswordKey: admin-password
+  # label used by GrafanaDashboard/GrafanaAlertRuleGroup instanceSelectors below
+  instanceLabel:
+    dashboards: grafana-monitoring
+
+clickhouseDatasourceUid: clickhouse-observability
+
+## Provisions the ClickHouse datasource itself (templates/datasource.yaml) — the
+## single source for both metrics and logs across every dashboard/alert in this
+## chart. Matches deploy/charts/clickhouse-cluster's bootstrap auth.
+clickhouse:
+  host: clickhouse-clickhouse-headless.observability.svc.cluster.local
+  port: 8123
+  protocol: http
+  database: observability
+  password: clickhouse
+
+## Applied to every entry in `services` unless a service overrides a key.
+## Assumes the shared instrumentation convention documented in
+## docs/observability-rollout.md: services expose http_requests_total,
+## http_request_duration_seconds (histogram, split into _sum/_count series by
+## the vector chart), and a saturation gauge pair, all with a `route` tag.
+defaults:
+  namespace: observability
+  # health endpoint used both as the k8s readiness probe and as the source for
+  # the synthetic-check monitor below (derived from http_requests_total{route=...},
+  # not an active external prober — see availability.yaml).
+  healthCheckPath: /health
+  # ClickHouse table backing the traffic/errors panels + rules. Only meaningful for
+  # services that follow the "runs" request/response lifecycle model (id, status,
+  # created_at) — point this at your own table if a service's domain model differs.
+  runsTable: api_runs
+  metrics:
+    httpRequestsTotal: http_requests_total
+    httpDurationSecondsSum: http_request_duration_seconds_sum
+    httpDurationSecondsCount: http_request_duration_seconds_count
+    inProgressGauge: runs_in_progress
+    queueDepthGauge: runs_queue_depth
+  maxConcurrency: 5
+  thresholds:
+    errorRateWarnPct: 10
+    errorRateCritPct: 25
+    latencyP95Seconds: 5
+    saturationPct: 80
+    availabilityMinSuccessPct: 99
+
+## One dashboard + one folder + one GrafanaAlertRuleGroup per golden signal, per
+## entry here. Add a service by adding an entry — only `name` is required, every
+## other field falls back to `defaults` (or `defaults.thresholds`/`defaults.metrics`
+## for nested overrides).
+services:
+  - name: log-analyzer
+    displayName: "Runs API"

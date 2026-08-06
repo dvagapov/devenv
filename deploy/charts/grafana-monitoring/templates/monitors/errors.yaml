@@ -1,0 +1,87 @@
+{{/* Golden signal: errors — request/run failure rate. */}}
+{{- range $svc := .Values.services }}
+{{- $cfg := include "grafana-monitoring.svcConfig" (dict "svc" $svc "defaults" $.Values.defaults) | fromYaml }}
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaAlertRuleGroup
+metadata:
+  name: {{ $cfg.name }}-errors
+  labels:
+    app: {{ $cfg.name }}
+    golden-signal: errors
+spec:
+  instanceSelector:
+    matchLabels:
+      {{- toYaml $.Values.grafanaInstance.instanceLabel | nindent 6 }}
+  folderUID: {{ include "grafana-monitoring.folderUID" $cfg.name }}
+  resyncPeriod: 5m
+  interval: 1m
+  rules:
+    - uid: {{ $cfg.name }}-high-error-rate
+      title: "{{ $cfg.displayName }}: high failure rate"
+      condition: threshold
+      for: 5m
+      noDataState: NoData
+      execErrState: Error
+      labels:
+        severity: warning
+        signal: errors
+        service: {{ $cfg.name }}
+      annotations:
+        summary: "{{ $cfg.name }} failure rate is elevated"
+        description: "Failure rate over the last 5m exceeds {{ $cfg.thresholds.errorRateWarnPct }}% (critical above {{ $cfg.thresholds.errorRateCritPct }}%)."
+      data:
+        - refId: query
+          datasourceUid: {{ $.Values.clickhouseDatasourceUid }}
+          relativeTimeRange: { from: 300, to: 0 }
+          model:
+            queryType: sql
+            rawSql: >-
+              SELECT if(countIf(status IN ('SUCCEEDED','FAILED')) = 0, 0,
+                100.0 * countIf(status = 'FAILED') / countIf(status IN ('SUCCEEDED','FAILED'))) AS value
+              FROM {{ $cfg.namespace }}.{{ $cfg.runsTable }} FINAL
+              WHERE created_at >= now() - INTERVAL 5 MINUTE
+        - refId: threshold
+          datasourceUid: __expr__
+          model:
+            type: threshold
+            expression: query
+            conditions:
+              - evaluator:
+                  type: gt
+                  params: [{{ $cfg.thresholds.errorRateWarnPct }}]
+
+    - uid: {{ $cfg.name }}-no-successful-runs
+      title: "{{ $cfg.displayName }}: no successful runs"
+      condition: threshold
+      for: 10m
+      noDataState: Alerting
+      execErrState: Error
+      labels:
+        severity: critical
+        signal: errors
+        service: {{ $cfg.name }}
+      annotations:
+        summary: "No successful runs in the last 10 minutes despite traffic"
+        description: "Proxy for the service being effectively down: zero SUCCEEDED runs while requests are still arriving."
+      data:
+        - refId: query
+          datasourceUid: {{ $.Values.clickhouseDatasourceUid }}
+          relativeTimeRange: { from: 600, to: 0 }
+          model:
+            queryType: sql
+            rawSql: >-
+              SELECT countIf(status = 'SUCCEEDED') AS value
+              FROM {{ $cfg.namespace }}.{{ $cfg.runsTable }} FINAL
+              WHERE created_at >= now() - INTERVAL 10 MINUTE
+                AND (SELECT count() FROM {{ $cfg.namespace }}.{{ $cfg.runsTable }} FINAL WHERE created_at >= now() - INTERVAL 10 MINUTE) > 0
+        - refId: threshold
+          datasourceUid: __expr__
+          model:
+            type: threshold
+            expression: query
+            conditions:
+              - evaluator:
+                  type: lt
+                  params: [1]
+{{- end }}

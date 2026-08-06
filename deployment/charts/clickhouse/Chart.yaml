@@ -1,6 +1,0 @@
-apiVersion: v2
-name: clickhouse
-description: ClickHouse — central data store for ML business data, pod logs and metrics
-type: application
-version: 0.2.0
-appVersion: "26.1.3"

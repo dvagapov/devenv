@@ -1,0 +1,25 @@
+grafana:
+  adminUser: admin
+  adminPassword: admin
+  plugins:
+    - grafana-clickhouse-datasource
+  service:
+    type: ClusterIP
+
+  # Grafana defaults to an ephemeral SQLite DB — any pod restart/reschedule wipes
+  # every folder/dashboard/alert-rule state (learned the hard way: a routine
+  # restart during rollout wiped alert rules that grafana-operator doesn't
+  # proactively re-push since nothing in its own spec/hash changed). Persist it.
+  persistence:
+    enabled: true
+    type: pvc
+    storageClassName: local-path
+    size: 1Gi
+
+  # No datasources/dashboards provisioned here. The ClickHouse datasource and all
+  # per-service dashboards/alerts are shipped separately via the grafana-monitoring
+  # ArgoCD app (deploy/charts/grafana-monitoring), as GrafanaDatasource/
+  # GrafanaDashboard/GrafanaAlertRuleGroup CRDs through grafana-operator — this
+  # chart only stands up the Grafana instance itself (+ the plugin, which is only
+  # installable at the Helm-chart level, not via CRD) plus admin credentials
+  # (grafana-monitoring's Grafana CR, in external mode, references this Secret).

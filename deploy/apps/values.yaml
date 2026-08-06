@@ -1,0 +1,50 @@
+## Argo CD project that owns all generated Applications
+argocd:
+  namespace: argocd
+  project: default
+  ## Git repo that contains the deploy/charts/* chart directories
+  repoURL: git@github.com:apify-hiring/hiring-platform-danil-vagapov.git
+  targetRevision: main
+
+## Each entry produces one Argo CD Application CR.
+## 'name' is the Application name; 'path' is the chart path inside the repo.
+applications:
+  - name: kube-state-metrics
+    path: deploy/charts/kube-state-metrics
+    namespace: observability
+    syncWave: "1"
+
+  - name: clickhouse-operator
+    path: deploy/charts/clickhouse-operator
+    namespace: observability
+    syncWave: "2"
+
+  - name: clickhouse
+    path: deploy/charts/clickhouse-cluster
+    namespace: observability
+    syncWave: "3"
+
+  - name: vector
+    path: deploy/charts/vector
+    namespace: observability
+    syncWave: "4"
+
+  - name: grafana
+    path: deploy/charts/grafana
+    namespace: observability
+    syncWave: "5"
+
+  - name: log-analyzer
+    path: deploy/charts/log-analyzer
+    namespace: observability
+    syncWave: "6"
+
+  - name: grafana-operator
+    path: deploy/charts/grafana-operator
+    namespace: observability
+    syncWave: "7"
+
+  - name: grafana-monitoring
+    path: deploy/charts/grafana-monitoring
+    namespace: observability
+    syncWave: "8"

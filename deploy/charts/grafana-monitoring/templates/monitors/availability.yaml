@@ -1,0 +1,66 @@
+{{/* Synthetic-style availability check, derived from http_requests_total{route=healthCheckPath}
+     rather than an active external prober (none deployed). Counters are cumulative
+     Prometheus samples, so success% uses a delta (max-min) over the window, not a
+     raw row count — see docs/observability-rollout.md for the general limitation of
+     computing rates/ratios from raw counter snapshots in this pipeline. */}}
+{{- range $svc := .Values.services }}
+{{- $cfg := include "grafana-monitoring.svcConfig" (dict "svc" $svc "defaults" $.Values.defaults) | fromYaml }}
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaAlertRuleGroup
+metadata:
+  name: {{ $cfg.name }}-availability
+  labels:
+    app: {{ $cfg.name }}
+    golden-signal: availability
+spec:
+  instanceSelector:
+    matchLabels:
+      {{- toYaml $.Values.grafanaInstance.instanceLabel | nindent 6 }}
+  folderUID: {{ include "grafana-monitoring.folderUID" $cfg.name }}
+  resyncPeriod: 5m
+  interval: 1m
+  rules:
+    - uid: {{ $cfg.name }}-health-check-failing
+      title: "{{ $cfg.displayName }}: health check failing"
+      condition: threshold
+      for: 5m
+      noDataState: Alerting
+      execErrState: Error
+      labels:
+        severity: critical
+        signal: availability
+        service: {{ $cfg.name }}
+      annotations:
+        summary: "{{ $cfg.name }}{{ $cfg.healthCheckPath }} success rate below {{ $cfg.thresholds.availabilityMinSuccessPct }}%"
+        description: "Synthetic check derived from http_requests_total{{ "{" }}route=\"{{ $cfg.healthCheckPath }}\"{{ "}" }} — not an active external probe, reflects requests the process itself actually received."
+      data:
+        - refId: query
+          datasourceUid: {{ $.Values.clickhouseDatasourceUid }}
+          relativeTimeRange: { from: 300, to: 0 }
+          model:
+            queryType: sql
+            rawSql: >-
+              WITH
+                (SELECT max(metric_value) - min(metric_value)
+                 FROM {{ $cfg.namespace }}.vector_metrics
+                 WHERE metric_name = '{{ $cfg.metrics.httpRequestsTotal }}'
+                   AND JSONExtractString(tags, 'route') = '{{ $cfg.healthCheckPath }}'
+                   AND JSONExtractString(tags, 'status') = '200'
+                   AND timestamp >= now() - INTERVAL 5 MINUTE) AS ok_delta,
+                (SELECT max(metric_value) - min(metric_value)
+                 FROM {{ $cfg.namespace }}.vector_metrics
+                 WHERE metric_name = '{{ $cfg.metrics.httpRequestsTotal }}'
+                   AND JSONExtractString(tags, 'route') = '{{ $cfg.healthCheckPath }}'
+                   AND timestamp >= now() - INTERVAL 5 MINUTE) AS total_delta
+              SELECT if(total_delta <= 0, 100, round(100.0 * ok_delta / total_delta, 2)) AS value
+        - refId: threshold
+          datasourceUid: __expr__
+          model:
+            type: threshold
+            expression: query
+            conditions:
+              - evaluator:
+                  type: lt
+                  params: [{{ $cfg.thresholds.availabilityMinSuccessPct }}]
+{{- end }}

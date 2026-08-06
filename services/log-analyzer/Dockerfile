@@ -21,4 +21,6 @@ COPY src ./src
 
 USER app
 
+EXPOSE 8000
+
 CMD ["python", "-m", "log_analyzer.main"]

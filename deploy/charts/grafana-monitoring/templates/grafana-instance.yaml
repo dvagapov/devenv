@@ -1,0 +1,18 @@
+# Registers the already-deployed (community Helm chart) Grafana instance with grafana-operator
+# in "external" mode, so GrafanaDashboard/GrafanaAlertRuleGroup CRs below can target it without
+# the operator taking over Grafana's lifecycle.
+apiVersion: grafana.integreatly.org/v1beta1
+kind: Grafana
+metadata:
+  name: {{ .Values.grafanaInstance.name }}
+  labels:
+    {{- toYaml .Values.grafanaInstance.instanceLabel | nindent 4 }}
+spec:
+  external:
+    url: {{ .Values.grafanaInstance.url }}
+    adminUser:
+      name: {{ .Values.grafanaInstance.credentialsSecretName }}
+      key: {{ .Values.grafanaInstance.adminUserKey }}
+    adminPassword:
+      name: {{ .Values.grafanaInstance.credentialsSecretName }}
+      key: {{ .Values.grafanaInstance.adminPasswordKey }}

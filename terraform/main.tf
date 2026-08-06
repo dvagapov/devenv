@@ -85,8 +85,8 @@ resource "null_resource" "argocd" {
   depends_on = [null_resource.wait_for_cluster]
 
   triggers = {
-    cluster_name       = var.cluster_name
-    argocd_namespace   = var.argocd_namespace
+    cluster_name         = var.cluster_name
+    argocd_namespace     = var.argocd_namespace
     argocd_chart_version = var.argocd_chart_version
   }
 
@@ -110,6 +110,38 @@ resource "null_resource" "argocd" {
         --set repoServer.replicas=1 \
         --set applicationSet.replicas=1 \
         --wait --timeout 5m
+    EOT
+  }
+}
+
+resource "null_resource" "argocd_apps" {
+  depends_on = [null_resource.argocd]
+
+  # Re-run every apply — helm dependency update + helm upgrade --install are both
+  # idempotent, and this keeps the app-of-apps in sync with any local chart edits
+  # without requiring a separate manual step.
+  triggers = {
+    always_run = timestamp()
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+    command     = <<-EOT
+      set -euo pipefail
+      export KUBECONFIG=$(eval echo ${var.kubeconfig_path})
+      cd "${path.module}/.."
+
+      # Requires a repository-credentials Secret already registered in the
+      # ${var.argocd_namespace} namespace for deploy/apps/values.yaml's repoURL
+      # (private repo) — see docs/local-environment.md. Not created here since it
+      # involves personal credentials.
+      for chart in deploy/charts/*/; do
+        helm dependency update "$chart"
+      done
+
+      helm upgrade --install argocd-apps deploy/apps \
+        --namespace ${var.argocd_namespace} \
+        --kube-context ${local.kube_context}
     EOT
   }
 }

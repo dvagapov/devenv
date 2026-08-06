@@ -1,0 +1,162 @@
+vector:
+  role: Agent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 768Mi
+  service:
+    enabled: false
+
+  customConfig:
+    data_dir: /vector-data-dir
+
+    api:
+      enabled: true
+      address: 0.0.0.0:8686
+
+    sources:
+      ## Automatically discovers and collects all container logs on the node
+      kubernetes_logs:
+        type: kubernetes_logs
+
+      ## Scrape pods with prometheus.io/scrape=true annotations
+      prometheus_scrape:
+        type: prometheus_scrape
+        scrape_interval_secs: 30
+        endpoints:
+          - http://kube-state-metrics.observability.svc.cluster.local:8080/metrics
+          - http://log-analyzer.observability.svc.cluster.local:8000/metrics
+
+      ## Node-level & pod-level resource metrics via kubelet
+      host_metrics:
+        type: host_metrics
+        collectors:
+          - cpu
+          - memory
+          - disk
+          - network
+        scrape_interval_secs: 30
+
+    transforms:
+      ## Flatten kubernetes_logs into columns matching the ClickHouse table
+      parse_logs:
+        type: remap
+        inputs: ["kubernetes_logs"]
+        source: |
+          .pod_name = string(del(.kubernetes.pod_name)) ?? ""
+          .pod_namespace = string(del(.kubernetes.pod_namespace)) ?? ""
+          .container_name = string(del(.kubernetes.container_name)) ?? ""
+          .container_image = string(del(.kubernetes.container_image)) ?? ""
+          .node_name = string(del(.kubernetes.pod_node_name)) ?? ""
+          del(.kubernetes)
+
+      ## Step 1: convert Metric events to Log events
+      raw_metrics_to_logs:
+        type: metric_to_log
+        inputs: ["prometheus_scrape", "host_metrics"]
+
+      ## Step 2: flatten the nested metric JSON into columns (gauges + counters only;
+      ## histograms are skipped here and handled by the histogram_* transforms below,
+      ## since a Prometheus histogram has no single scalar .gauge/.counter value)
+      metrics_to_logs:
+        type: remap
+        inputs: ["raw_metrics_to_logs"]
+        source: |
+          .metric_name = string(del(.name)) ?? ""
+          .metric_kind = string(del(.kind)) ?? ""
+          gv, err1 = to_float(.gauge.value)
+          cv, err2 = to_float(.counter.value)
+          if err1 == null {
+            .metric_value = gv
+          } else if err2 == null {
+            .metric_value = cv
+          } else {
+            abort
+          }
+          del(.gauge)
+          del(.counter)
+          t = del(.tags)
+          if t != null { .tags = encode_json(t) } else { .tags = "{}" }
+          .source_type = "metric"
+
+      ## Histogram metrics (e.g. http_request_duration_seconds, run_duration_seconds) carry an
+      ## aggregated_histogram struct instead of a scalar value. Emit their cumulative sum/count
+      ## as two derived series (<name>_sum, <name>_count) so latency can be approximated in
+      ## ClickHouse as sum/count over a window, mirroring Prometheus's own _sum/_count series.
+      histogram_sum_to_logs:
+        type: remap
+        inputs: ["raw_metrics_to_logs"]
+        source: |
+          if !exists(.aggregated_histogram) { abort }
+          .metric_name = (string(.name) ?? "") + "_sum"
+          .metric_kind = string(del(.kind)) ?? ""
+          .metric_value = to_float(.aggregated_histogram.sum) ?? 0.0
+          del(.name)
+          del(.aggregated_histogram)
+          t = del(.tags)
+          if t != null { .tags = encode_json(t) } else { .tags = "{}" }
+          .source_type = "metric"
+
+      histogram_count_to_logs:
+        type: remap
+        inputs: ["raw_metrics_to_logs"]
+        source: |
+          if !exists(.aggregated_histogram) { abort }
+          .metric_name = (string(.name) ?? "") + "_count"
+          .metric_kind = string(del(.kind)) ?? ""
+          .metric_value = to_float(.aggregated_histogram.count) ?? 0.0
+          del(.name)
+          del(.aggregated_histogram)
+          t = del(.tags)
+          if t != null { .tags = encode_json(t) } else { .tags = "{}" }
+          .source_type = "metric"
+
+    sinks:
+      ## Logs → ClickHouse via HTTP (native JSON insert)
+      clickhouse_logs:
+        type: clickhouse
+        inputs: ["parse_logs"]
+        healthcheck:
+          enabled: false
+        endpoint: http://clickhouse-clickhouse-headless.observability.svc.cluster.local:8123
+        database: observability
+        table: vector_logs
+        auth:
+          strategy: basic
+          user: default
+          password: clickhouse
+        skip_unknown_fields: true
+        compression: gzip
+        batch:
+          max_bytes: 262144
+          timeout_secs: 5
+        request:
+          timeout_secs: 30
+        encoding:
+          timestamp_format: unix_ns
+
+      ## Metrics (as logs) → ClickHouse
+      clickhouse_metrics:
+        type: clickhouse
+        inputs: ["metrics_to_logs", "histogram_sum_to_logs", "histogram_count_to_logs"]
+        healthcheck:
+          enabled: false
+        endpoint: http://clickhouse-clickhouse-headless.observability.svc.cluster.local:8123
+        database: observability
+        table: vector_metrics
+        auth:
+          strategy: basic
+          user: default
+          password: clickhouse
+        skip_unknown_fields: true
+        compression: gzip
+        batch:
+          max_bytes: 262144
+          timeout_secs: 5
+        request:
+          timeout_secs: 30
+        encoding:
+          timestamp_format: unix_ns

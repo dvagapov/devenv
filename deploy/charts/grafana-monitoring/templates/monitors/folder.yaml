@@ -1,0 +1,21 @@
+{{- range $svc := .Values.services }}
+{{- $cfg := include "grafana-monitoring.svcConfig" (dict "svc" $svc "defaults" $.Values.defaults) | fromYaml }}
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaFolder
+metadata:
+  name: {{ $cfg.name }}-alerts
+  labels:
+    app: {{ $cfg.name }}
+spec:
+  title: {{ $cfg.displayName | quote }}
+  # Pinned explicitly: GrafanaAlertRuleGroup.folderRef (name-based lookup) does not
+  # reliably resolve to the folder's actual Grafana-side UID in practice — it ends up
+  # looking up the k8s object's metadata.uid, which Grafana never assigns as the
+  # folder UID. folderUID (used by the monitors/*.yaml templates) sidesteps that
+  # lookup entirely.
+  uid: {{ include "grafana-monitoring.folderUID" $cfg.name }}
+  instanceSelector:
+    matchLabels:
+      {{- toYaml $.Values.grafanaInstance.instanceLabel | nindent 6 }}
+{{- end }}

@@ -1,0 +1,53 @@
+{{/* Golden signal: saturation — in-flight work vs configured concurrency cap. */}}
+{{- range $svc := .Values.services }}
+{{- $cfg := include "grafana-monitoring.svcConfig" (dict "svc" $svc "defaults" $.Values.defaults) | fromYaml }}
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaAlertRuleGroup
+metadata:
+  name: {{ $cfg.name }}-saturation
+  labels:
+    app: {{ $cfg.name }}
+    golden-signal: saturation
+spec:
+  instanceSelector:
+    matchLabels:
+      {{- toYaml $.Values.grafanaInstance.instanceLabel | nindent 6 }}
+  folderUID: {{ include "grafana-monitoring.folderUID" $cfg.name }}
+  resyncPeriod: 5m
+  interval: 1m
+  rules:
+    - uid: {{ $cfg.name }}-saturation-high
+      title: "{{ $cfg.displayName }}: high concurrency saturation"
+      condition: threshold
+      for: 5m
+      noDataState: NoData
+      execErrState: Error
+      labels:
+        severity: warning
+        signal: saturation
+        service: {{ $cfg.name }}
+      annotations:
+        summary: "Active work is near the configured concurrency limit ({{ $cfg.maxConcurrency }})"
+        description: "{{ $cfg.metrics.inProgressGauge }} / maxConcurrency exceeds {{ $cfg.thresholds.saturationPct }}% for 5m."
+      data:
+        - refId: query
+          datasourceUid: {{ $.Values.clickhouseDatasourceUid }}
+          relativeTimeRange: { from: 300, to: 0 }
+          model:
+            queryType: sql
+            rawSql: >-
+              SELECT 100.0 * avg(metric_value) / {{ $cfg.maxConcurrency }} AS value
+              FROM {{ $cfg.namespace }}.vector_metrics
+              WHERE metric_name = '{{ $cfg.metrics.inProgressGauge }}'
+                AND timestamp >= now() - INTERVAL 5 MINUTE
+        - refId: threshold
+          datasourceUid: __expr__
+          model:
+            type: threshold
+            expression: query
+            conditions:
+              - evaluator:
+                  type: gt
+                  params: [{{ $cfg.thresholds.saturationPct }}]
+{{- end }}

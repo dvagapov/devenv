@@ -1,0 +1,11 @@
+apiVersion: v2
+name: grafana-operator
+description: Grafana Operator — manages Grafana dashboards/alert rules as CRDs against the existing Grafana instance
+type: application
+version: 0.1.0
+appVersion: "5.15.1"
+
+dependencies:
+  - name: grafana-operator
+    version: "v5.15.1"
+    repository: https://grafana.github.io/helm-charts

@@ -1,0 +1,40 @@
+image:
+  # k3d's containerd mirror config only redirects the registry's own in-cluster
+  # hostname (k3d-<registry_name>:<port>), not "localhost:5000" — that host:port
+  # only resolves from the Mac (where `docker push localhost:5000/...` works via
+  # the published port). Pulls from inside cluster nodes must use this hostname.
+  repository: k3d-dev-registry:5000/log-analyzer
+  tag: dev
+  # "dev" is a floating tag rebuilt/pushed repeatedly in local dev — IfNotPresent
+  # would keep serving a stale cached image under the same tag forever.
+  pullPolicy: Always
+
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 8000
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+env:
+  CLICKHOUSE_HOST: clickhouse-clickhouse-headless.observability.svc.cluster.local
+  CLICKHOUSE_PORT: "8123"
+  CLICKHOUSE_USER: default
+  CLICKHOUSE_DATABASE: observability
+  RUNS_TABLE: api_runs
+  HTTP_HOST: "0.0.0.0"
+  HTTP_PORT: "8000"
+  RUN_MIN_DURATION_SECONDS: "1.0"
+  RUN_MAX_DURATION_SECONDS: "8.0"
+  RUN_FAILURE_RATE: "0.1"
+  RUN_MAX_CONCURRENCY: "5"
+
+envSecret:
+  CLICKHOUSE_PASSWORD: clickhouse

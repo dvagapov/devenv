@@ -1,0 +1,68 @@
+cluster:
+  name: clickhouse
+  replicas: 1
+
+keeper:
+  name: clickhouse-keeper
+  replicas: 1
+  storage:
+    storageClassName: local-path
+    size: 1Gi
+
+image:
+  repository: clickhouse/clickhouse-server
+  tag: "26.1-alpine"
+
+storage:
+  storageClassName: local-path
+  size: 5Gi
+
+bootstrap:
+  enabled: true
+  image: clickhouse/clickhouse-server:26.1-alpine
+  auth:
+    user: default
+    password: clickhouse
+  sql: |
+    CREATE DATABASE IF NOT EXISTS ml;
+    CREATE DATABASE IF NOT EXISTS observability;
+
+    CREATE TABLE IF NOT EXISTS observability.vector_logs (
+        timestamp DateTime64(9) DEFAULT now64(9),
+        message String DEFAULT '',
+        file String DEFAULT '',
+        source_type LowCardinality(String) DEFAULT '',
+        stream LowCardinality(String) DEFAULT '',
+        pod_name String DEFAULT '',
+        pod_namespace LowCardinality(String) DEFAULT '',
+        container_name String DEFAULT '',
+        container_image String DEFAULT '',
+        node_name String DEFAULT ''
+    ) ENGINE = MergeTree()
+    PARTITION BY toYYYYMMDD(timestamp)
+    ORDER BY (pod_namespace, pod_name, timestamp)
+    TTL toDateTime(timestamp) + INTERVAL 7 DAY;
+
+    CREATE TABLE IF NOT EXISTS observability.vector_metrics (
+        timestamp DateTime64(9) DEFAULT now64(9),
+        metric_name String DEFAULT '',
+        metric_kind LowCardinality(String) DEFAULT '',
+        metric_value Float64 DEFAULT 0,
+        tags String DEFAULT '',
+        source_type LowCardinality(String) DEFAULT ''
+    ) ENGINE = MergeTree()
+    PARTITION BY toYYYYMMDD(timestamp)
+    ORDER BY (metric_name, timestamp)
+    TTL toDateTime(timestamp) + INTERVAL 7 DAY;
+
+    CREATE TABLE IF NOT EXISTS observability.api_runs (
+        id String,
+        status Enum8('READY' = 1, 'RUNNING' = 2, 'SUCCEEDED' = 3, 'FAILED' = 4),
+        input_json String DEFAULT '',
+        started_at DateTime,
+        finished_at Nullable(DateTime),
+        duration_seconds Nullable(Float64),
+        created_at DateTime DEFAULT now()
+    ) ENGINE = ReplacingMergeTree(created_at)
+    ORDER BY (id)
+    TTL created_at + INTERVAL 7 DAY;

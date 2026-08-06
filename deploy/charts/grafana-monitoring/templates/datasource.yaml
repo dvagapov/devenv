@@ -1,0 +1,33 @@
+# The ClickHouse datasource, provisioned as a CRD like everything else in this
+# chart — NOT baked into deploy/charts/grafana/values.yaml's file-based
+# provisioning (that used to define it; removed to avoid two competing owners of
+# the same datasource UID). All dashboards/alerts in this chart reference it via
+# .Values.clickhouseDatasourceUid, which must match spec.datasource.uid below.
+#
+# Backs both metrics (observability.vector_metrics, .api_runs) and logs
+# (observability.vector_logs) — see templates/dashboards/golden-signals.yaml's
+# "Recent Logs" panel for a logs-via-ClickHouse example.
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDatasource
+metadata:
+  name: clickhouse
+spec:
+  instanceSelector:
+    matchLabels:
+      {{- toYaml .Values.grafanaInstance.instanceLabel | nindent 6 }}
+  datasource:
+    name: ClickHouse
+    uid: {{ .Values.clickhouseDatasourceUid }}
+    type: grafana-clickhouse-datasource
+    access: proxy
+    # The official grafana-clickhouse-datasource plugin (v4.x) reads the server
+    # address from jsonData.host/port, NOT a top-level "url" — a url field here
+    # is silently ignored, producing "invalid server host" query errors with no
+    # indication which field was wrong (confirmed live against plugin 4.20.0).
+    jsonData:
+      host: {{ .Values.clickhouse.host }}
+      port: {{ .Values.clickhouse.port }}
+      protocol: {{ .Values.clickhouse.protocol }}
+      defaultDatabase: {{ .Values.clickhouse.database }}
+    secureJsonData:
+      password: {{ .Values.clickhouse.password }}

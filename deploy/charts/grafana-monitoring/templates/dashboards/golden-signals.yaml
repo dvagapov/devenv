@@ -1,0 +1,122 @@
+{{/* Generic golden-signals dashboard, one per entry in .Values.services. */}}
+{{- range $svc := .Values.services }}
+{{- $cfg := include "grafana-monitoring.svcConfig" (dict "svc" $svc "defaults" $.Values.defaults) | fromYaml }}
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDashboard
+metadata:
+  name: {{ $cfg.name }}-golden-signals
+  labels:
+    app: {{ $cfg.name }}
+spec:
+  resyncPeriod: 5m
+  instanceSelector:
+    matchLabels:
+      {{- toYaml $.Values.grafanaInstance.instanceLabel | nindent 6 }}
+  folder: {{ $cfg.displayName | quote }}
+  json: |
+    {
+      "id": null,
+      "uid": "{{ $cfg.name }}-golden-signals",
+      "title": "{{ $cfg.displayName }} Golden Signals",
+      "tags": ["{{ $cfg.name }}", "golden-signals", "clickhouse"],
+      "timezone": "browser",
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "30s",
+      "time": { "from": "now-6h", "to": "now" },
+      "panels": [
+        {
+          "type": "stat",
+          "title": "Runs Started (24h)",
+          "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "{{ $.Values.clickhouseDatasourceUid }}" },
+          "targets": [{ "refId": "A", "queryType": "sql", "rawSql": "SELECT count() AS value FROM {{ $cfg.namespace }}.{{ $cfg.runsTable }} WHERE created_at >= now() - INTERVAL 24 HOUR" }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": false }, "colorMode": "value" }
+        },
+        {
+          "type": "stat",
+          "title": "Success Rate % (24h)",
+          "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "{{ $.Values.clickhouseDatasourceUid }}" },
+          "targets": [{ "refId": "A", "queryType": "sql", "rawSql": "SELECT if(countIf(status IN ('SUCCEEDED','FAILED')) = 0, 100, round(100.0 * countIf(status = 'SUCCEEDED') / countIf(status IN ('SUCCEEDED','FAILED')), 2)) AS value FROM {{ $cfg.namespace }}.{{ $cfg.runsTable }} FINAL WHERE created_at >= now() - INTERVAL 24 HOUR" }],
+          "fieldConfig": { "defaults": { "unit": "percent", "thresholds": { "steps": [ { "color": "red", "value": null }, { "color": "yellow", "value": 75 }, { "color": "green", "value": 90 } ] } } },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": false }, "colorMode": "value" }
+        },
+        {
+          "type": "stat",
+          "title": "Active Runs",
+          "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "{{ $.Values.clickhouseDatasourceUid }}" },
+          "targets": [{ "refId": "A", "queryType": "sql", "rawSql": "SELECT metric_value AS value FROM {{ $cfg.namespace }}.vector_metrics WHERE metric_name = '{{ $cfg.metrics.inProgressGauge }}' ORDER BY timestamp DESC LIMIT 1" }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": false }, "colorMode": "value" }
+        },
+        {
+          "type": "stat",
+          "title": "Avg HTTP Latency (5m)",
+          "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "{{ $.Values.clickhouseDatasourceUid }}" },
+          "targets": [{ "refId": "A", "queryType": "sql", "rawSql": "SELECT round(argMaxIf(metric_value, timestamp, metric_name = '{{ $cfg.metrics.httpDurationSecondsSum }}') / nullif(argMaxIf(metric_value, timestamp, metric_name = '{{ $cfg.metrics.httpDurationSecondsCount }}'), 0), 3) AS value FROM {{ $cfg.namespace }}.vector_metrics WHERE metric_name IN ('{{ $cfg.metrics.httpDurationSecondsSum }}', '{{ $cfg.metrics.httpDurationSecondsCount }}') AND timestamp >= now() - INTERVAL 5 MINUTE" }],
+          "fieldConfig": { "defaults": { "unit": "s" } },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": false }, "colorMode": "value" }
+        },
+        {
+          "type": "stat",
+          "title": "Health Check Success % (5m)",
+          "gridPos": { "h": 4, "w": 6, "x": 0, "y": 4 },
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "{{ $.Values.clickhouseDatasourceUid }}" },
+          "targets": [{ "refId": "A", "queryType": "sql", "rawSql": "WITH (SELECT max(metric_value) - min(metric_value) FROM {{ $cfg.namespace }}.vector_metrics WHERE metric_name = '{{ $cfg.metrics.httpRequestsTotal }}' AND JSONExtractString(tags, 'route') = '{{ $cfg.healthCheckPath }}' AND JSONExtractString(tags, 'status') = '200' AND timestamp >= now() - INTERVAL 5 MINUTE) AS ok_delta, (SELECT max(metric_value) - min(metric_value) FROM {{ $cfg.namespace }}.vector_metrics WHERE metric_name = '{{ $cfg.metrics.httpRequestsTotal }}' AND JSONExtractString(tags, 'route') = '{{ $cfg.healthCheckPath }}' AND timestamp >= now() - INTERVAL 5 MINUTE) AS total_delta SELECT if(total_delta <= 0, 100, round(100.0 * ok_delta / total_delta, 2)) AS value" }],
+          "fieldConfig": { "defaults": { "unit": "percent" } },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": false }, "colorMode": "value" }
+        },
+        {
+          "type": "timeseries",
+          "title": "Traffic — Runs Started / min",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "{{ $.Values.clickhouseDatasourceUid }}" },
+          "targets": [{ "refId": "A", "queryType": "sql", "rawSql": "SELECT toStartOfMinute(created_at) AS time, count() AS value FROM {{ $cfg.namespace }}.{{ $cfg.runsTable }} WHERE created_at >= now() - INTERVAL 24 HOUR GROUP BY time ORDER BY time" }]
+        },
+        {
+          "type": "timeseries",
+          "title": "Errors — Run Failure Rate %",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "{{ $.Values.clickhouseDatasourceUid }}" },
+          "targets": [{ "refId": "A", "queryType": "sql", "rawSql": "SELECT toStartOfFiveMinute(created_at) AS time, round(100.0 * countIf(status = 'FAILED') / countIf(status IN ('SUCCEEDED','FAILED')), 2) AS value FROM {{ $cfg.namespace }}.{{ $cfg.runsTable }} FINAL WHERE created_at >= now() - INTERVAL 24 HOUR GROUP BY time ORDER BY time" }],
+          "fieldConfig": { "defaults": { "unit": "percent" } }
+        },
+        {
+          "type": "timeseries",
+          "title": "Latency — Avg HTTP Request Duration",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "{{ $.Values.clickhouseDatasourceUid }}" },
+          "targets": [{ "refId": "A", "queryType": "sql", "rawSql": "SELECT toStartOfMinute(timestamp) AS time, argMaxIf(metric_value, timestamp, metric_name = '{{ $cfg.metrics.httpDurationSecondsSum }}') / nullif(argMaxIf(metric_value, timestamp, metric_name = '{{ $cfg.metrics.httpDurationSecondsCount }}'), 0) AS value FROM {{ $cfg.namespace }}.vector_metrics WHERE metric_name IN ('{{ $cfg.metrics.httpDurationSecondsSum }}', '{{ $cfg.metrics.httpDurationSecondsCount }}') AND timestamp >= now() - INTERVAL 24 HOUR GROUP BY time ORDER BY time" }],
+          "fieldConfig": { "defaults": { "unit": "s" } }
+        },
+        {
+          "type": "timeseries",
+          "title": "Saturation — Active Work vs Max Concurrency ({{ $cfg.maxConcurrency }})",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "{{ $.Values.clickhouseDatasourceUid }}" },
+          "targets": [
+            { "refId": "A", "queryType": "sql", "rawSql": "SELECT toStartOfMinute(timestamp) AS time, avg(metric_value) AS value, '{{ $cfg.metrics.inProgressGauge }}' AS metric FROM {{ $cfg.namespace }}.vector_metrics WHERE metric_name = '{{ $cfg.metrics.inProgressGauge }}' AND timestamp >= now() - INTERVAL 24 HOUR GROUP BY time ORDER BY time" },
+            { "refId": "B", "queryType": "sql", "rawSql": "SELECT toStartOfMinute(timestamp) AS time, avg(metric_value) AS value, '{{ $cfg.metrics.queueDepthGauge }}' AS metric FROM {{ $cfg.namespace }}.vector_metrics WHERE metric_name = '{{ $cfg.metrics.queueDepthGauge }}' AND timestamp >= now() - INTERVAL 24 HOUR GROUP BY time ORDER BY time" }
+          ]
+        },
+        {
+          "type": "table",
+          "title": "Recent Runs",
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 },
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "{{ $.Values.clickhouseDatasourceUid }}" },
+          "targets": [{ "refId": "A", "queryType": "sql", "rawSql": "SELECT created_at, id, status, duration_seconds FROM {{ $cfg.namespace }}.{{ $cfg.runsTable }} FINAL ORDER BY created_at DESC LIMIT 25" }]
+        },
+        {
+          "type": "logs",
+          "title": "Recent Logs",
+          "description": "observability.vector_logs via the same ClickHouse datasource as the metrics panels above — filtered to this service's container.",
+          "gridPos": { "h": 10, "w": 24, "x": 0, "y": 32 },
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "{{ $.Values.clickhouseDatasourceUid }}" },
+          "targets": [{ "refId": "A", "queryType": "sql", "rawSql": "SELECT timestamp, message, pod_name, stream FROM {{ $cfg.namespace }}.vector_logs WHERE container_name = '{{ $cfg.name }}' AND timestamp >= now() - INTERVAL 24 HOUR ORDER BY timestamp DESC LIMIT 500" }]
+        }
+      ]
+    }
+{{- end }}
